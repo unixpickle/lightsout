@@ -6,13 +6,13 @@ import (
 )
 
 func TestSolve(t *testing.T) {
-	start := State{
+	start := NewStateFlags([]bool{
 		false, false, true, false, false,
 		false, true, true, true, false,
 		false, false, true, false, false,
 		false, false, false, false, false,
 		false, false, false, false, false,
-	}
+	})
 	solution := start.Solve()
 	if solution == nil {
 		t.Error("could not solve state")
@@ -22,13 +22,13 @@ func TestSolve(t *testing.T) {
 		t.Errorf("bad solution: %v", solution)
 	}
 
-	start = State{
+	start = NewStateFlags([]bool{
 		false, false, true, false, false,
 		false, true, true, true, false,
 		false, false, true, false, false,
 		false, false, false, false, true,
 		false, false, false, true, true,
-	}
+	})
 	solution = start.Solve()
 	if solution == nil {
 		t.Error("could not solve state")
@@ -43,7 +43,7 @@ func TestSolve(t *testing.T) {
 	}
 
 	for scrambleLen := 3; scrambleLen < 8; scrambleLen++ {
-		start = State{}
+		start = State(0)
 		for i := 0; i < scrambleLen; i++ {
 			start.Move(Move{rand.Intn(BoardSize), rand.Intn(BoardSize)})
 		}
@@ -60,4 +60,10 @@ func TestSolve(t *testing.T) {
 			}
 		}
 	}
+}
+
+func BenchmarkSolve(b *testing.B) {
+	// Attempt to solve an unsolvable state.
+	board := State(1)
+	board.Solve()
 }

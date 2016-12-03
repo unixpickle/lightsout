@@ -10,9 +10,23 @@ type Move struct {
 }
 
 // A State stores the instantaneous state for a game.
-// The state is stored in row-major order, with a false
-// value indicating an unlit square.
-type State [BoardSize * BoardSize]bool
+// It is a bitmap, where the bit corresponding to (1<<0)
+// is the first bit in the map, (1<<1) the second, etc.
+// The state is stored in row-major order, with a 0 value
+// indicating an unlit square.
+type State uint32
+
+// NewStateFlags creates a state from a slice of flags
+// representing a bitmap.
+func NewStateFlags(f []bool) State {
+	res := State(0)
+	for i, x := range f {
+		if x {
+			res |= (1 << uint(i))
+		}
+	}
+	return res
+}
 
 // Move applies a move to the given square, flipping all
 // of its neighbors.
@@ -24,14 +38,14 @@ func (s *State) Move(m Move) {
 	s.toggle(m.Row-1, m.Col)
 }
 
+// Get gets the square value at the given row and column.
+func (s *State) Get(row, col int) bool {
+	return 0 != (*s & (1 << (uint(row)*BoardSize + uint(col))))
+}
+
 // Solved returns true if all the lights are out.
 func (s *State) Solved() bool {
-	for _, x := range s[:] {
-		if x {
-			return false
-		}
-	}
-	return true
+	return 0 == (*s & 0x1FFFFFF)
 }
 
 // Solve finds an optimal solution to the state or returns
@@ -72,7 +86,7 @@ func (s *State) toggle(row, col int) {
 	if col < 0 || col >= BoardSize {
 		return
 	}
-	s[row*BoardSize+col] = !s[row*BoardSize+col]
+	*s ^= (1 << (uint(row)*BoardSize + uint(col)))
 }
 
 type solveNode struct {
