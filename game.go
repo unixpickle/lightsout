@@ -54,8 +54,8 @@ func (s *State) Solve() []Move {
 	if s.Solved() {
 		return []Move{}
 	}
-	visited := map[State]bool{}
-	queue := []solveNode{{*s, []Move{}}}
+	visited := make([]bool, 1<<(BoardSize*BoardSize))
+	queue := []*solveNode{{Prior: nil, State: *s}}
 	for len(queue) > 0 {
 		popped := queue[0]
 		queue = queue[1:]
@@ -64,14 +64,18 @@ func (s *State) Solve() []Move {
 				next := popped.State
 				m := Move{row, col}
 				next.Move(m)
-				if !visited[next] {
-					visited[next] = true
-					newMoves := append([]Move{}, popped.Prior...)
-					newMoves = append(newMoves, m)
+				if !visited[int(next)] {
+					visited[int(next)] = true
+					newNode := &solveNode{Prior: popped, Move: m, State: next}
 					if next.Solved() {
-						return newMoves
+						var res []Move
+						for newNode.Prior != nil {
+							res = append([]Move{newNode.Move}, res...)
+							newNode = newNode.Prior
+						}
+						return res
 					}
-					queue = append(queue, solveNode{next, newMoves})
+					queue = append(queue, newNode)
 				}
 			}
 		}
@@ -90,6 +94,7 @@ func (s *State) toggle(row, col int) {
 }
 
 type solveNode struct {
+	Prior *solveNode
+	Move  Move
 	State State
-	Prior []Move
 }
