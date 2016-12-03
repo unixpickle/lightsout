@@ -32,10 +32,18 @@ func NewStateFlags(f []bool) State {
 // of its neighbors.
 func (s *State) Move(m Move) {
 	s.toggle(m.Row, m.Col)
-	s.toggle(m.Row, m.Col-1)
-	s.toggle(m.Row, m.Col+1)
-	s.toggle(m.Row+1, m.Col)
-	s.toggle(m.Row-1, m.Col)
+	if m.Col > 0 {
+		s.toggle(m.Row, m.Col-1)
+	}
+	if m.Col+1 < BoardSize {
+		s.toggle(m.Row, m.Col+1)
+	}
+	if m.Row > 0 {
+		s.toggle(m.Row-1, m.Col)
+	}
+	if m.Row+1 < BoardSize {
+		s.toggle(m.Row+1, m.Col)
+	}
 }
 
 // Get gets the square value at the given row and column.
@@ -84,12 +92,6 @@ func (s *State) Solve() []Move {
 }
 
 func (s *State) toggle(row, col int) {
-	if row < 0 || row >= BoardSize {
-		return
-	}
-	if col < 0 || col >= BoardSize {
-		return
-	}
 	*s ^= (1 << (uint(row)*BoardSize + uint(col)))
 }
 
