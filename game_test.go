@@ -65,5 +65,7 @@ func TestSolve(t *testing.T) {
 func BenchmarkSolve(b *testing.B) {
 	// Attempt to solve an unsolvable state.
 	board := State(1)
-	board.Solve()
+	for i := 0; i < b.N; i++ {
+		board.Solve()
+	}
 }
