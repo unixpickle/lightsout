@@ -1,5 +1,7 @@
 package lightsout
 
+import "strings"
+
 const BoardSize = 5
 
 // A Move represents a move in a game of Lights Out, where
@@ -89,6 +91,22 @@ func (s *State) Solve() []Move {
 		}
 	}
 	return nil
+}
+
+func (s *State) String() string {
+	var res []string
+	for i := 0; i < 5; i++ {
+		var row []string
+		for j := 0; j < 5; j++ {
+			if s.Get(i, j) {
+				row = append(row, "1")
+			} else {
+				row = append(row, "0")
+			}
+		}
+		res = append(res, strings.Join(row, " "))
+	}
+	return "[" + strings.Join(res, "; ") + "]"
 }
 
 func (s *State) toggle(row, col int) {
