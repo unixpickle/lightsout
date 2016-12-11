@@ -25,11 +25,16 @@ func TestSoftMover(t *testing.T) {
 	probs := sm.Apply(moves).Output()
 
 	input.Vector = append(probs, input.Vector...)
+	rvec := autofunc.RVector{input: make(linalg.Vector, len(input.Vector))}
+	for i := range input.Vector {
+		rvec[input][i] = rand.NormFloat64()
+	}
 
-	checker := functest.FuncChecker{
+	checker := functest.RFuncChecker{
 		F:     SoftMover{},
 		Input: input,
 		Vars:  []*autofunc.Variable{input},
+		RV:    rvec,
 	}
 	checker.FullCheck(t)
 }

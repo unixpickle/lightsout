@@ -20,12 +20,7 @@ func SoftSolve(g *State) []Move {
 		solution.Vector[i] = rand.NormFloat64()
 	}
 
-	initState := &autofunc.Variable{Vector: make(linalg.Vector, 25)}
-	for i := 0; i < 25; i++ {
-		if (*g)&(1<<uint(i)) != 0 {
-			initState.Vector[i] = 1
-		}
-	}
+	initState := &autofunc.Variable{Vector: StateVector(g)}
 
 	desired := make(linalg.Vector, 25)
 	for i := 0; i < 500; i++ {
@@ -50,6 +45,18 @@ func SoftSolve(g *State) []Move {
 		return nil
 	}
 	return moves
+}
+
+// StateVector generates a vector representing a state,
+// where 1 is "on" and 0 is "off".
+func StateVector(g *State) linalg.Vector {
+	initState := make(linalg.Vector, 25)
+	for i := 0; i < 25; i++ {
+		if (*g)&(1<<uint(i)) != 0 {
+			initState[i] = 1
+		}
+	}
+	return initState
 }
 
 // SoftMover is an autofunc.RFunc for applying moves to a
@@ -87,12 +94,42 @@ func (_ SoftMover) Apply(in autofunc.Result) autofunc.Result {
 	})
 }
 
+// ApplyR is like Apply for RResults.
+func (_ SoftMover) ApplyR(rv autofunc.RVector, in autofunc.RResult) autofunc.RResult {
+	if len(in.Output()) != 50 {
+		panic(fmt.Sprintf("expected input size %d (got %d)", 50, len(in.Output())))
+	}
+	return autofunc.PoolR(in, func(in autofunc.RResult) autofunc.RResult {
+		start := autofunc.SliceR(in, 25, 50)
+		probs := autofunc.SplitR(25, autofunc.SliceR(in, 0, 25))
+		var idx int
+		return autofunc.FoldR(start, probs, func(s, prob autofunc.RResult) autofunc.RResult {
+			comp := autofunc.AddScalerR(autofunc.ScaleR(prob, -1), 1)
+			idx++
+			return autofunc.AddR(
+				autofunc.ScaleFirstR(s, comp),
+				autofunc.ScaleFirstR(SoftMover{}.softMoveR(s, idx-1), prob),
+			)
+		})
+	})
+}
+
 func (_ SoftMover) softMove(board autofunc.Result, idx int) autofunc.Result {
 	indices := SoftMover{}.indicesForMove(idx)
 	return &softMoveResult{
 		Input:   board,
 		Flipped: indices,
 		OutVec:  SoftMover{}.complementValues(board.Output(), indices),
+	}
+}
+
+func (_ SoftMover) softMoveR(board autofunc.RResult, idx int) autofunc.RResult {
+	indices := SoftMover{}.indicesForMove(idx)
+	return &softMoveRResult{
+		Input:   board,
+		Flipped: indices,
+		OutVec:  SoftMover{}.complementValues(board.Output(), indices),
+		ROutVec: SoftMover{}.negateValues(board.ROutput(), indices),
 	}
 }
 
@@ -125,6 +162,15 @@ func (_ SoftMover) complementValues(in linalg.Vector, idxs []int) linalg.Vector 
 	return res
 }
 
+func (_ SoftMover) negateValues(in linalg.Vector, idxs []int) linalg.Vector {
+	res := make(linalg.Vector, len(in))
+	copy(res, in)
+	for _, idx := range idxs {
+		res[idx] = -in[idx]
+	}
+	return res
+}
+
 type softMoveResult struct {
 	Input   autofunc.Result
 	Flipped []int
@@ -147,4 +193,35 @@ func (s *softMoveResult) PropagateGradient(u linalg.Vector, g autofunc.Gradient)
 		u[i] *= -1
 	}
 	s.Input.PropagateGradient(u, g)
+}
+
+type softMoveRResult struct {
+	Input   autofunc.RResult
+	Flipped []int
+	OutVec  linalg.Vector
+	ROutVec linalg.Vector
+}
+
+func (s *softMoveRResult) Output() linalg.Vector {
+	return s.OutVec
+}
+
+func (s *softMoveRResult) ROutput() linalg.Vector {
+	return s.ROutVec
+}
+
+func (s *softMoveRResult) Constant(rg autofunc.RGradient, g autofunc.Gradient) bool {
+	return s.Input.Constant(rg, g)
+}
+
+func (s *softMoveRResult) PropagateRGradient(u, uR linalg.Vector, rg autofunc.RGradient,
+	g autofunc.Gradient) {
+	if s.Constant(rg, g) {
+		return
+	}
+	for _, i := range s.Flipped {
+		u[i] *= -1
+		uR[i] *= -1
+	}
+	s.Input.PropagateRGradient(u, uR, rg, g)
 }
