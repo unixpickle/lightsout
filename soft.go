@@ -15,15 +15,9 @@ import (
 // This will usually fail, since gradient descent is not
 // guaranteed to find the global minimum.
 func SoftSolve(g *State) []Move {
-	solution := make([]*autofunc.Variable, 25)
-	for i := range solution {
-		randVec := make(linalg.Vector, 26)
-		for i := range randVec {
-			randVec[i] = rand.NormFloat64()
-		}
-		solution[i] = &autofunc.Variable{
-			Vector: randVec,
-		}
+	solution := &autofunc.Variable{Vector: make(linalg.Vector, 25)}
+	for i := range solution.Vector {
+		solution.Vector[i] = rand.NormFloat64()
 	}
 
 	initState := &autofunc.Variable{Vector: make(linalg.Vector, 25)}
@@ -35,24 +29,19 @@ func SoftSolve(g *State) []Move {
 
 	desired := make(linalg.Vector, 25)
 	for i := 0; i < 500; i++ {
-		var sm autofunc.Softmax
-		var state autofunc.Result = initState
-		for _, x := range solution {
-			softMoves := sm.Apply(x)
-			state = SoftMover{}.Apply(autofunc.Concat(softMoves, state))
-		}
+		probs := autofunc.Sigmoid{}.Apply(solution)
+		state := SoftMover{}.Apply(autofunc.Concat(probs, initState))
 		cost := neuralnet.AbsCost{}.Cost(desired, state)
-		grad := autofunc.NewGradient(solution)
+		grad := autofunc.NewGradient([]*autofunc.Variable{solution})
 		cost.PropagateGradient([]float64{1}, grad)
 		grad.AddToVars(-5)
 	}
 
-	moves := make([]Move, 0, len(solution))
+	moves := make([]Move, 0, 25)
 	state := *g
-	for _, x := range solution {
-		_, maxIdx := x.Vector.Max()
-		if maxIdx != 25 {
-			m := Move{Row: maxIdx / 5, Col: maxIdx % 5}
+	for i, x := range solution.Vector {
+		if x > 0 {
+			m := Move{Row: i / 5, Col: i % 5}
 			moves = append(moves, m)
 			state.Move(m)
 		}
@@ -67,13 +56,12 @@ func SoftSolve(g *State) []Move {
 // probabilistic game state.
 type SoftMover struct{}
 
-// Apply applies a set of probabilistically distributed
-// moves to a probabilistic game state.
+// Apply applies a set of moves to a game state.
 //
-// The first 26 components of the input correspond to all
-// 25 moves and a "no-op".
-// Each component of this "move vector" should be the
-// probability of making that move.
+// The first 25 components describe the probability of
+// making each of the 25 moves.
+// Each probability may range between 0 and 1, independent
+// of all the other moves.
 //
 // The remaining 25 components of the input correspond to
 // the light state probabilities, where 1 is "on" and 0 is
@@ -81,18 +69,21 @@ type SoftMover struct{}
 //
 // The result is a new set of light state probabilities.
 func (_ SoftMover) Apply(in autofunc.Result) autofunc.Result {
-	if len(in.Output()) != 25+26 {
-		panic(fmt.Sprintf("expected input size %d (got %d)", 25+26, len(in.Output())))
+	if len(in.Output()) != 50 {
+		panic(fmt.Sprintf("expected input size %d (got %d)", 50, len(in.Output())))
 	}
 	return autofunc.Pool(in, func(in autofunc.Result) autofunc.Result {
-		start := autofunc.Slice(in, 26, 26+25)
-		res := autofunc.ScaleFirst(start, autofunc.Slice(in, 25, 26))
-		for move := 0; move < 25; move++ {
-			prob := autofunc.Slice(in, move, move+1)
-			afterMove := SoftMover{}.softMove(start, move)
-			res = autofunc.Add(res, autofunc.ScaleFirst(afterMove, prob))
-		}
-		return res
+		start := autofunc.Slice(in, 25, 50)
+		probs := autofunc.Split(25, autofunc.Slice(in, 0, 25))
+		var idx int
+		return autofunc.Fold(start, probs, func(s, prob autofunc.Result) autofunc.Result {
+			comp := autofunc.AddScaler(autofunc.Scale(prob, -1), 1)
+			idx++
+			return autofunc.Add(
+				autofunc.ScaleFirst(s, comp),
+				autofunc.ScaleFirst(SoftMover{}.softMove(s, idx-1), prob),
+			)
+		})
 	})
 }
 

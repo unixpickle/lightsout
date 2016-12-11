@@ -17,7 +17,7 @@ func TestSoftMover(t *testing.T) {
 		}
 	}
 
-	moves := &autofunc.Variable{Vector: make(linalg.Vector, 26)}
+	moves := &autofunc.Variable{Vector: make(linalg.Vector, 25)}
 	for i := range input.Vector {
 		moves.Vector[i] = rand.NormFloat64()
 	}
@@ -39,10 +39,10 @@ func TestSoftSolve(t *testing.T) {
 		t.Skip("test will take too long")
 	}
 	start := State(0)
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 10; i++ {
 		start.Move(Move{rand.Intn(BoardSize), rand.Intn(BoardSize)})
 	}
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 100; i++ {
 		if len(SoftSolve(&start)) > 0 {
 			return
 		}
