@@ -32,19 +32,7 @@ func SoftSolve(g *State) []Move {
 		grad.AddToVars(-5)
 	}
 
-	moves := make([]Move, 0, 25)
-	state := *g
-	for i, x := range solution.Vector {
-		if x > 0 {
-			m := Move{Row: i / 5, Col: i % 5}
-			moves = append(moves, m)
-			state.Move(m)
-		}
-	}
-	if !state.Solved() {
-		return nil
-	}
-	return moves
+	return solutionForVec(solution.Vector, *g)
 }
 
 // StateVector generates a vector representing a state,
@@ -57,6 +45,21 @@ func StateVector(g *State) linalg.Vector {
 		}
 	}
 	return initState
+}
+
+func solutionForVec(vec linalg.Vector, state State) []Move {
+	moves := make([]Move, 0, 25)
+	for i, x := range vec {
+		if x > 0 {
+			m := Move{Row: i / 5, Col: i % 5}
+			moves = append(moves, m)
+			state.Move(m)
+		}
+	}
+	if !state.Solved() {
+		return nil
+	}
+	return moves
 }
 
 // SoftMover is an autofunc.RFunc for applying moves to a
