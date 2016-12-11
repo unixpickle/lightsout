@@ -3,10 +3,8 @@ package lightsout
 import (
 	"io/ioutil"
 	"log"
-	"math/rand"
 
 	"github.com/unixpickle/autofunc"
-	"github.com/unixpickle/num-analysis/linalg"
 	"github.com/unixpickle/sgd"
 	"github.com/unixpickle/weakai/neuralnet"
 )
@@ -27,11 +25,11 @@ func NewNetwork() *Network {
 		&neuralnet.HyperbolicTangent{},
 		&neuralnet.DenseLayer{
 			InputCount:  300,
-			OutputCount: 200,
+			OutputCount: 500,
 		},
 		&neuralnet.HyperbolicTangent{},
 		&neuralnet.DenseLayer{
-			InputCount:  200,
+			InputCount:  500,
 			OutputCount: 25,
 		},
 		&neuralnet.Sigmoid{},
@@ -56,18 +54,26 @@ func LoadNetwork(path string) (*Network, error) {
 // Train trains the network.
 // If the verbose flag is `true`, the progress is logged.
 func (n *Network) Train(verbose bool) {
-	trainNet := neuralnet.Network{&trainingFunc{Solver: n.Net}}
 	g := &neuralnet.BatchRGradienter{
-		Learner:  trainNet.BatchLearner(),
+		Learner:  n.Net.BatchLearner(),
 		CostFunc: &neuralnet.AbsCost{},
 	}
 	precond := &sgd.Adam{Gradienter: g}
-	s := generateTrainingSamples()
+
+	if verbose {
+		log.Println("Generating training samples...")
+	}
+	s := allTrainingSamples()
+	if verbose {
+		log.Println("Training on", s.Len(), "samples...")
+	}
+	sgd.ShuffleSampleSet(s)
+
 	batchSize := 10
 	var avgCost float64
 	var idx int
 	sgd.SGDMini(precond, s, 0.001, batchSize, func(batch sgd.SampleSet) bool {
-		cost := neuralnet.TotalCost(g.CostFunc, trainNet, batch) / float64(batchSize)
+		cost := neuralnet.TotalCost(g.CostFunc, n.Net, batch) / float64(batchSize)
 		if avgCost == 0 {
 			avgCost = cost
 		} else {
@@ -98,46 +104,74 @@ func (n *Network) Save(path string) error {
 	return ioutil.WriteFile(path, data, 0755)
 }
 
-type trainingFunc struct {
-	Solver neuralnet.Network
+type trainingSamples struct {
+	scrambles []State
+	solutions []uint32
 }
 
-func (t *trainingFunc) Apply(in autofunc.Result) autofunc.Result {
-	return autofunc.Pool(in, func(in autofunc.Result) autofunc.Result {
-		solution := t.Solver.Apply(in)
-		return SoftMover{}.Apply(autofunc.Concat(solution, in))
-	})
-}
+func allTrainingSamples() *trainingSamples {
+	res := &trainingSamples{}
 
-func (t *trainingFunc) ApplyR(rv autofunc.RVector, in autofunc.RResult) autofunc.RResult {
-	return autofunc.PoolR(in, func(in autofunc.RResult) autofunc.RResult {
-		solution := t.Solver.ApplyR(rv, in)
-		return SoftMover{}.ApplyR(rv, autofunc.ConcatR(solution, in))
-	})
-}
+	visited := make([]bool, 1<<(BoardSize*BoardSize))
+	queue := []*exploreNode{{State: State(0)}}
+	for len(queue) > 0 {
+		popped := queue[0]
+		queue = queue[1:]
 
-func (t *trainingFunc) SerializerType() string {
-	panic("not implemented")
-}
+		res.scrambles = append(res.scrambles, popped.State)
+		res.solutions = append(res.solutions, popped.Moves)
 
-func (t *trainingFunc) Serialize() ([]byte, error) {
-	panic("not implemented")
-}
-
-func (t *trainingFunc) Parameters() []*autofunc.Variable {
-	return t.Solver.Parameters()
-}
-
-func generateTrainingSamples() sgd.SampleSet {
-	var res sgd.SliceSampleSet
-	desiredOut := make(linalg.Vector, 25)
-	for i := 0; i < 500000; i++ {
-		start := State(0)
-		for i := 0; i < 50; i++ {
-			start.Move(Move{rand.Intn(BoardSize), rand.Intn(BoardSize)})
+		for row := 0; row < BoardSize; row++ {
+			for col := 0; col < BoardSize; col++ {
+				next := popped.State
+				m := Move{row, col}
+				next.Move(m)
+				if !visited[int(next)] {
+					visited[int(next)] = true
+					moves := popped.Moves | (1 << uint32(row*BoardSize+col))
+					newNode := &exploreNode{Moves: moves, State: next}
+					queue = append(queue, newNode)
+				}
+			}
 		}
-		vec := StateVector(&start)
-		res = append(res, neuralnet.VectorSample{Input: vec, Output: desiredOut})
 	}
+
 	return res
+}
+
+func (t *trainingSamples) Len() int {
+	return len(t.scrambles)
+}
+
+func (t *trainingSamples) Swap(i, j int) {
+	t.scrambles[i], t.scrambles[j] = t.scrambles[j], t.scrambles[i]
+	t.solutions[i], t.solutions[j] = t.solutions[j], t.solutions[i]
+}
+
+func (t *trainingSamples) GetSample(i int) interface{} {
+	scramble := t.scrambles[i]
+	solution := State(t.solutions[i])
+	return neuralnet.VectorSample{
+		Input:  StateVector(&scramble),
+		Output: StateVector(&solution),
+	}
+}
+
+func (t *trainingSamples) Copy() sgd.SampleSet {
+	return &trainingSamples{
+		scrambles: append([]State{}, t.scrambles...),
+		solutions: append([]uint32{}, t.solutions...),
+	}
+}
+
+func (t *trainingSamples) Subset(i, j int) sgd.SampleSet {
+	return &trainingSamples{
+		scrambles: t.scrambles[i:j],
+		solutions: t.solutions[i:j],
+	}
+}
+
+type exploreNode struct {
+	State State
+	Moves uint32
 }
