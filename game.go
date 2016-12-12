@@ -11,6 +11,23 @@ type Move struct {
 	Col int
 }
 
+// CleanMoves simplifies a set of moves by removing
+// duplicates and sorting the moves in a canonical order.
+func CleanMoves(m []Move) []Move {
+	moveFlags := make([]bool, BoardSize*BoardSize)
+	for _, move := range m {
+		idx := move.Row*BoardSize + move.Col
+		moveFlags[idx] = !moveFlags[idx]
+	}
+	res := make([]Move, 0, len(moveFlags))
+	for i, x := range moveFlags {
+		if x {
+			res = append(res, Move{Row: i / BoardSize, Col: i % BoardSize})
+		}
+	}
+	return res
+}
+
 // A State stores the instantaneous state for a game.
 // It is a bitmap, where the bit corresponding to (1<<0)
 // is the first bit in the map, (1<<1) the second, etc.

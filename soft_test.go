@@ -47,7 +47,7 @@ func TestSoftSolve(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		start.Move(Move{rand.Intn(BoardSize), rand.Intn(BoardSize)})
 	}
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 200; i++ {
 		if len(SoftSolve(&start)) > 0 {
 			return
 		}
