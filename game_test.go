@@ -62,7 +62,19 @@ func TestSolve(t *testing.T) {
 	}
 }
 
-func BenchmarkSolve(b *testing.B) {
+func BenchmarkRandomSolve(b *testing.B) {
+	rand.Seed(123)
+	start := State(0)
+	for i := 0; i < 50; i++ {
+		start.Move(Move{rand.Intn(BoardSize), rand.Intn(BoardSize)})
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		start.Solve()
+	}
+}
+
+func BenchmarkSolveImpossible(b *testing.B) {
 	// Attempt to solve an unsolvable state.
 	board := State(1)
 	for i := 0; i < b.N; i++ {

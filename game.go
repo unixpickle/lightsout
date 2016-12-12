@@ -78,36 +78,7 @@ func (s *State) Solved() bool {
 // Solve finds an optimal solution to the state or returns
 // nil if the state is unsolvable.
 func (s *State) Solve() []Move {
-	if s.Solved() {
-		return []Move{}
-	}
-	visited := make([]bool, 1<<(BoardSize*BoardSize))
-	queue := []*solveNode{{Prior: nil, State: *s}}
-	for len(queue) > 0 {
-		popped := queue[0]
-		queue = queue[1:]
-		for row := 0; row < BoardSize; row++ {
-			for col := 0; col < BoardSize; col++ {
-				next := popped.State
-				m := Move{row, col}
-				next.Move(m)
-				if !visited[int(next)] {
-					visited[int(next)] = true
-					newNode := &solveNode{Prior: popped, Move: m, State: next}
-					if next.Solved() {
-						var res []Move
-						for newNode.Prior != nil {
-							res = append([]Move{newNode.Move}, res...)
-							newNode = newNode.Prior
-						}
-						return res
-					}
-					queue = append(queue, newNode)
-				}
-			}
-		}
-	}
-	return nil
+	return recursiveSolve(*s, 0, computeMaxMoves(), BoardSize*BoardSize)
 }
 
 func (s *State) String() string {
@@ -130,8 +101,47 @@ func (s *State) toggle(row, col int) {
 	*s ^= (1 << (uint(row)*BoardSize + uint(col)))
 }
 
-type solveNode struct {
-	Prior *solveNode
-	Move  Move
-	State State
+func recursiveSolve(s State, moveIdx int, maxMoves []int, maxLen int) []Move {
+	if s.Solved() {
+		return []Move{}
+	} else if moveIdx == BoardSize*BoardSize || maxLen == 0 {
+		return nil
+	}
+	for spot, max := range maxMoves {
+		if moveIdx > max {
+			if s&(1<<uint32(spot)) != 0 {
+				return nil
+			}
+		}
+	}
+	solution1 := recursiveSolve(s, moveIdx+1, maxMoves, maxLen)
+	m := Move{Row: moveIdx / BoardSize, Col: moveIdx % BoardSize}
+	s.Move(m)
+	solution2 := recursiveSolve(s, moveIdx+1, maxMoves, maxLen-1)
+	if solution2 != nil {
+		solution2 = append(solution2, m)
+	} else {
+		return solution1
+	}
+	if solution1 == nil || len(solution2) < len(solution1) {
+		return solution2
+	}
+	return solution1
+}
+
+// computeMaxMoves computes the maximum move index which
+// affects each piece on a board.
+func computeMaxMoves() []int {
+	res := make([]int, BoardSize*BoardSize)
+	for i := range res {
+		for j := 0; j < BoardSize*BoardSize; j++ {
+			m := Move{Row: j / BoardSize, Col: j % BoardSize}
+			s := State(0)
+			s.Move(m)
+			if s&(1<<uint32(i)) != 0 {
+				res[i] = j
+			}
+		}
+	}
+	return res
 }
