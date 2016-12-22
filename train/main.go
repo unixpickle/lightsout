@@ -1,10 +1,10 @@
 package main
 
 import (
+	"log"
 	"math/rand"
 	"time"
 
-	"github.com/unixpickle/hessfree"
 	"github.com/unixpickle/lightsout"
 	"github.com/unixpickle/sgd"
 	"github.com/unixpickle/weakai/neuralnet"
@@ -19,23 +19,28 @@ func main() {
 	}
 
 	s := allTrainingSamples()
-	ui := hessfree.NewConsoleUI()
-	trainer := hessfree.Trainer{
-		Learner: &hessfree.DampingLearner{
-			WrappedLearner: &hessfree.NeuralNetLearner{
-				Layers: net.Net,
-				Output: neuralnet.Network{},
-				Cost:   neuralnet.SigmoidCECost{},
-			},
-			DampingCoeff: 0.01,
-			UI:           ui,
+	g := &sgd.Adam{
+		Gradienter: &neuralnet.BatchRGradienter{
+			Learner:  net.Net.BatchLearner(),
+			CostFunc: neuralnet.SigmoidCECost{},
 		},
-		Samples:   s,
-		BatchSize: 10000,
-		UI:        ui,
 	}
-
-	trainer.Train()
+	var idx int
+	bs := 5000
+	var lastB sgd.SampleSet
+	sgd.SGDMini(g, s, 0.0001, bs, func(batch sgd.SampleSet) bool {
+		var last float64
+		if lastB != nil {
+			last = neuralnet.TotalCost(neuralnet.SigmoidCECost{}, net.Net,
+				lastB) / float64(bs)
+		}
+		lastB = batch.Copy()
+		log.Printf("batch %d: cost=%f last=%f", idx,
+			neuralnet.TotalCost(neuralnet.SigmoidCECost{}, net.Net, batch)/float64(bs),
+			last)
+		idx++
+		return true
+	})
 
 	net.Save("out_net")
 }
